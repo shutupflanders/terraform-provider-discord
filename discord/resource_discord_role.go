@@ -98,17 +98,21 @@ func resourceRoleCreate(ctx context.Context, d *schema.ResourceData, m interface
 	client := m.(*Context).Session
 
 	serverId := d.Get("server_id").(string)
-	server, err := client.Guild(serverId)
+	server, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.Guild(serverId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Server does not exist with that ID: %s", serverId)
 	}
-	role, err := client.GuildRoleCreate(serverId, &discordgo.RoleParams{
-		Name:        d.Get("name").(string),
-		Permissions: Int64Ptr(int64(d.Get("permissions").(int))),
-		Color:       IntPtr(d.Get("color").(int)),
-		Hoist:       BoolPtr(d.Get("hoist").(bool)),
-		Mentionable: BoolPtr(d.Get("mentionable").(bool)),
-	}, discordgo.WithContext(ctx))
+	role, err := executeWithRetry(ctx, func() (*discordgo.Role, error) {
+		return client.GuildRoleCreate(serverId, &discordgo.RoleParams{
+			Name:        d.Get("name").(string),
+			Permissions: Int64Ptr(int64(d.Get("permissions").(int))),
+			Color:       IntPtr(d.Get("color").(int)),
+			Hoist:       BoolPtr(d.Get("hoist").(bool)),
+			Mentionable: BoolPtr(d.Get("mentionable").(bool)),
+		}, discordgo.WithContext(ctx))
+	})
 
 	if err != nil {
 		return diag.Errorf("Failed to create role for %s: %s", serverId, err.Error())
@@ -128,7 +132,10 @@ func resourceRoleCreate(ctx context.Context, d *schema.ResourceData, m interface
 			param = append(param, &discordgo.Role{ID: oldRole.ID, Position: role.Position})
 		}
 
-		if _, err := client.GuildRoleReorder(serverId, param, discordgo.WithContext(ctx)); err != nil {
+		_, err := executeWithRetry(ctx, func() ([]*discordgo.Role, error) {
+			return client.GuildRoleReorder(serverId, param, discordgo.WithContext(ctx))
+		})
+		if err != nil {
 			diags = append(diags, diag.Errorf("Failed to re-order roles: %s", err.Error())...)
 		} else {
 			d.Set("position", newPosition)
@@ -176,7 +183,9 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, m interface
 	client := m.(*Context).Session
 
 	serverId := d.Get("server_id").(string)
-	server, err := client.Guild(serverId)
+	server, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.Guild(serverId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to fetch server %s: %s", serverId, err.Error())
 	}
@@ -207,7 +216,10 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, m interface
 			param = append(param, &discordgo.Role{ID: oldRole.ID, Position: role.Position})
 		}
 
-		if _, err := client.GuildRoleReorder(serverId, param, discordgo.WithContext(ctx)); err != nil {
+		_, err := executeWithRetry(ctx, func() ([]*discordgo.Role, error) {
+			return client.GuildRoleReorder(serverId, param, discordgo.WithContext(ctx))
+		})
+		if err != nil {
 			diags = append(diags, diag.Errorf("Failed to re-order roles: %s", err.Error())...)
 		} else {
 			d.Set("position", newPosition)
@@ -227,13 +239,16 @@ func resourceRoleUpdate(ctx context.Context, d *schema.ResourceData, m interface
 		newColor = role.Color
 	}
 
-	if role, err = client.GuildRoleEdit(serverId, roleId, &discordgo.RoleParams{
-		Name:        newName,
-		Color:       &newColor,
-		Hoist:       &newHoist,
-		Mentionable: &newMentionable,
-		Permissions: Int64Ptr(newPermissions),
-	}, discordgo.WithContext(ctx)); err != nil {
+	role, err = executeWithRetry(ctx, func() (*discordgo.Role, error) {
+		return client.GuildRoleEdit(serverId, roleId, &discordgo.RoleParams{
+			Name:        newName,
+			Color:       &newColor,
+			Hoist:       &newHoist,
+			Mentionable: &newMentionable,
+			Permissions: Int64Ptr(newPermissions),
+		}, discordgo.WithContext(ctx))
+	})
+	if err != nil {
 		return diag.Errorf("Failed to update role %s: %s", d.Id(), err.Error())
 	}
 
@@ -253,7 +268,10 @@ func resourceRoleDelete(ctx context.Context, d *schema.ResourceData, m interface
 	client := m.(*Context).Session
 
 	serverId := d.Get("server_id")
-	if err := client.GuildRoleDelete(serverId.(string), d.Id(), discordgo.WithContext(ctx)); err != nil {
+	err := executeWithRetryNoResult(ctx, func() error {
+		return client.GuildRoleDelete(serverId.(string), d.Id(), discordgo.WithContext(ctx))
+	})
+	if err != nil {
 		return diag.Errorf("Failed to delete role: %s", err.Error())
 	}
 

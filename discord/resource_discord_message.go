@@ -313,11 +313,13 @@ func resourceMessageCreate(ctx context.Context, d *schema.ResourceData, m interf
 			embeds = append(embeds, embed)
 		}
 	}
-	message, err := client.ChannelMessageSendComplex(channelId, &discordgo.MessageSend{
-		Content: d.Get("content").(string),
-		Embeds:  embeds,
-		TTS:     d.Get("tts").(bool),
-	}, discordgo.WithContext(ctx))
+	message, err := executeWithRetry(ctx, func() (*discordgo.Message, error) {
+		return client.ChannelMessageSendComplex(channelId, &discordgo.MessageSend{
+			Content: d.Get("content").(string),
+			Embeds:  embeds,
+			TTS:     d.Get("tts").(bool),
+		}, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to create message in %s: %s", channelId, err.Error())
 	}
@@ -336,9 +338,11 @@ func resourceMessageCreate(ctx context.Context, d *schema.ResourceData, m interf
 	}
 
 	if d.Get("pinned").(bool) {
-		pinError := client.ChannelMessagePin(channelId, message.ID, discordgo.WithContext(ctx))
+		pinError := executeWithRetryNoResult(ctx, func() error {
+			return client.ChannelMessagePin(channelId, message.ID, discordgo.WithContext(ctx))
+		})
 		if pinError != nil {
-			diags = append(diags, diag.Errorf("Failed to pin message %s in %s: %s", message.ID, channelId, err.Error())...)
+			diags = append(diags, diag.Errorf("Failed to pin message %s in %s: %s", message.ID, channelId, pinError.Error())...)
 		}
 	}
 
@@ -351,7 +355,9 @@ func resourceMessageRead(ctx context.Context, d *schema.ResourceData, m interfac
 
 	channelId := d.Get("channel_id").(string)
 	messageId := d.Id()
-	message, err := client.ChannelMessage(channelId, messageId, discordgo.WithContext(ctx))
+	message, err := executeWithRetry(ctx, func() (*discordgo.Message, error) {
+		return client.ChannelMessage(channelId, messageId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to fetch message %s in %s: %s", messageId, channelId, err.Error())
 	}
@@ -385,7 +391,9 @@ func resourceMessageUpdate(ctx context.Context, d *schema.ResourceData, m interf
 	messageId := d.Id()
 
 	var content string
-	message, err := client.ChannelMessage(channelId, messageId, discordgo.WithContext(ctx))
+	message, err := executeWithRetry(ctx, func() (*discordgo.Message, error) {
+		return client.ChannelMessage(channelId, messageId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to fetch message %s in %s: %s", messageId, channelId, err.Error())
 	}
@@ -410,12 +418,14 @@ func resourceMessageUpdate(ctx context.Context, d *schema.ResourceData, m interf
 		embeds = append(embeds, embed)
 	}
 
-	editedMessage, err := client.ChannelMessageEditComplex(&discordgo.MessageEdit{
-		ID:      messageId,
-		Channel: channelId,
-		Content: &content,
-		Embeds:  &embeds,
-	}, discordgo.WithContext(ctx))
+	editedMessage, err := executeWithRetry(ctx, func() (*discordgo.Message, error) {
+		return client.ChannelMessageEditComplex(&discordgo.MessageEdit{
+			ID:      messageId,
+			Channel: channelId,
+			Content: &content,
+			Embeds:  &embeds,
+		}, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to update message %s in %s: %s", channelId, messageId, err.Error())
 	}
@@ -437,9 +447,12 @@ func resourceMessageDelete(ctx context.Context, d *schema.ResourceData, m interf
 
 	channelId := d.Get("channel_id").(string)
 	messageId := d.Id()
-	if err := client.ChannelMessageDelete(channelId, messageId, discordgo.WithContext(ctx)); err != nil {
+	err := executeWithRetryNoResult(ctx, func() error {
+		return client.ChannelMessageDelete(channelId, messageId, discordgo.WithContext(ctx))
+	})
+	if err != nil {
 		return diag.Errorf("Failed to delete message %s in %s: %s", messageId, channelId, err.Error())
-	} else {
-		return diags
 	}
+
+	return diags
 }

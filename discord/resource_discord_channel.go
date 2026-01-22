@@ -180,15 +180,17 @@ func resourceChannelCreate(ctx context.Context, d *schema.ResourceData, m interf
 			parentId = v.(string)
 		}
 	}
-	channel, err := client.GuildChannelCreateComplex(serverId, discordgo.GuildChannelCreateData{
-		Name:      d.Get("name").(string),
-		Type:      channelTypeInt,
-		Topic:     topic,
-		Bitrate:   bitrate,
-		UserLimit: userlimit,
-		ParentID:  parentId,
-		NSFW:      nsfw,
-	}, discordgo.WithContext(ctx))
+	channel, err := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+		return client.GuildChannelCreateComplex(serverId, discordgo.GuildChannelCreateData{
+			Name:      d.Get("name").(string),
+			Type:      channelTypeInt,
+			Topic:     topic,
+			Bitrate:   bitrate,
+			UserLimit: userlimit,
+			ParentID:  parentId,
+			NSFW:      nsfw,
+		}, discordgo.WithContext(ctx))
+	})
 
 	if err != nil {
 		return diag.Errorf("Failed to create channel: %s", err.Error())
@@ -203,7 +205,9 @@ func resourceChannelCreate(ctx context.Context, d *schema.ResourceData, m interf
 			if channel.ParentID == "" {
 				return append(diags, diag.Errorf("Can't sync permissions with category. Channel (%s) doesn't have a category", channel.ID)...)
 			}
-			parent, err := client.Channel(channel.ParentID)
+			parent, err := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+				return client.Channel(channel.ParentID, discordgo.WithContext(ctx))
+			})
 			if err != nil {
 				return append(diags, diag.Errorf("Can't sync permissions with category. Channel (%s) doesn't have a category", channel.ID)...)
 			}
@@ -221,7 +225,9 @@ func resourceChannelRead(ctx context.Context, d *schema.ResourceData, m interfac
 	var diags diag.Diagnostics
 	client := m.(*Context).Session
 
-	channel, err := client.Channel(d.Id(), discordgo.WithContext(ctx))
+	channel, err := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+		return client.Channel(d.Id(), discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to fetch channel %s: %s", d.Id(), err.Error())
 	}
@@ -255,7 +261,9 @@ func resourceChannelRead(ctx context.Context, d *schema.ResourceData, m interfac
 		if channel.ParentID == "" {
 			d.Set("sync_perms_with_category", false)
 		} else {
-			parent, err := client.Channel(channel.ParentID)
+			parent, err := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+				return client.Channel(channel.ParentID, discordgo.WithContext(ctx))
+			})
 			if err != nil {
 				return diag.Errorf("Failed to fetch category of channel %s: %s", channel.ID, err.Error())
 			}
@@ -281,7 +289,9 @@ func resourceChannelUpdate(ctx context.Context, d *schema.ResourceData, m interf
 		return diag.FromErr(reason)
 	}
 
-	channel, _ := client.Channel(d.Id(), discordgo.WithContext(ctx))
+	channel, _ := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+		return client.Channel(d.Id(), discordgo.WithContext(ctx))
+	})
 	channelType := d.Get("type").(string)
 
 	var (
@@ -314,15 +324,17 @@ func resourceChannelUpdate(ctx context.Context, d *schema.ResourceData, m interf
 		id := d.Get("category").(string)
 		parentId = map[bool]string{true: id, false: ""}[d.Get("category").(string) != ""]
 	}
-	channel, err := client.ChannelEditComplex(d.Id(), &discordgo.ChannelEdit{
-		Name:      name,
-		Position:  &position,
-		Topic:     topic,
-		NSFW:      &nsfw,
-		Bitrate:   bitRate,
-		UserLimit: userLimit,
-		ParentID:  parentId,
-	}, discordgo.WithContext(ctx))
+	channel, err := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+		return client.ChannelEditComplex(d.Id(), &discordgo.ChannelEdit{
+			Name:      name,
+			Position:  &position,
+			Topic:     topic,
+			NSFW:      &nsfw,
+			Bitrate:   bitRate,
+			UserLimit: userLimit,
+			ParentID:  parentId,
+		}, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to update channel %s: %s", d.Id(), err.Error())
 	}
@@ -332,7 +344,9 @@ func resourceChannelUpdate(ctx context.Context, d *schema.ResourceData, m interf
 			if channel.ParentID == "" {
 				return append(diags, diag.Errorf("Can't sync permissions with category. Channel (%s) doesn't have a category", channel.ID)...)
 			}
-			parent, err := client.Channel(channel.ParentID, discordgo.WithContext(ctx))
+			parent, err := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+				return client.Channel(channel.ParentID, discordgo.WithContext(ctx))
+			})
 			if err != nil {
 				return append(diags, diag.Errorf("Can't sync permissions with category. Channel (%s) doesn't have a category", channel.ID)...)
 			}
@@ -350,7 +364,9 @@ func resourceChannelDelete(ctx context.Context, d *schema.ResourceData, m interf
 	var diags diag.Diagnostics
 	client := m.(*Context).Session
 
-	_, err := client.ChannelDelete(d.Id(), discordgo.WithContext(ctx))
+	_, err := executeWithRetry(ctx, func() (*discordgo.Channel, error) {
+		return client.ChannelDelete(d.Id(), discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to delete channel %s: %s", d.Id(), err.Error())
 	}

@@ -34,6 +34,7 @@ func Provider(version string) func() *schema.Provider {
 				"discord_managed_server":     resourceDiscordManagedServer(),
 				"discord_category_channel":   resourceDiscordCategoryChannel(),
 				"discord_forum_channel":      resourceDiscordForumChannel(),
+				"discord_forum_post":         resourceDiscordForumPost(),
 				"discord_text_channel":       resourceDiscordTextChannel(),
 				"discord_voice_channel":      resourceDiscordVoiceChannel(),
 				"discord_news_channel":       resourceDiscordNewsChannel(),
