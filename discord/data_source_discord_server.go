@@ -135,20 +135,26 @@ func dataSourceDiscordServerRead(ctx context.Context, d *schema.ResourceData, m 
 	client := m.(*Context).Session
 
 	if v, ok := d.GetOk("server_id"); ok {
-		server, err = client.Guild(v.(string), discordgo.WithContext(ctx))
+		server, err = executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+			return client.Guild(v.(string), discordgo.WithContext(ctx))
+		})
 		if err != nil {
 			return diag.Errorf("Failed to fetch server %s: %s", v.(string), err.Error())
 		}
 	}
 	if v, ok := d.GetOk("name"); ok {
-		guilds, err := client.UserGuilds(1000, "", "", false, discordgo.WithContext(ctx))
+		guilds, err := executeWithRetry(ctx, func() ([]*discordgo.UserGuild, error) {
+			return client.UserGuilds(1000, "", "", false, discordgo.WithContext(ctx))
+		})
 		if err != nil {
 			return diag.Errorf("Failed to fetch server %s: %s", v.(string), err.Error())
 		}
 
 		for _, s := range guilds {
 			if s.Name == v.(string) {
-				server, err = client.Guild(v.(string), discordgo.WithContext(ctx))
+				server, err = executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+					return client.Guild(v.(string), discordgo.WithContext(ctx))
+				})
 				if err != nil {
 					return diag.Errorf("Failed to fetch server %s: %s", v.(string), err.Error())
 				}

@@ -77,13 +77,15 @@ func resourceRoleEveryoneUpdate(ctx context.Context, d *schema.ResourceData, m i
 	d.SetId(serverId)
 	newPermission := int64(d.Get("permissions").(int))
 
-	if role, err := client.GuildRoleEdit(serverId, serverId, &discordgo.RoleParams{
-		Permissions: &newPermission,
-	}, discordgo.WithContext(ctx)); err != nil {
+	role, err := executeWithRetry(ctx, func() (*discordgo.Role, error) {
+		return client.GuildRoleEdit(serverId, serverId, &discordgo.RoleParams{
+			Permissions: &newPermission,
+		}, discordgo.WithContext(ctx))
+	})
+	if err != nil {
 		return diag.Errorf("Failed to update role %s: %s", d.Id(), err.Error())
-	} else {
-		d.Set("permissions", role.Permissions)
-
-		return diags
 	}
+	d.Set("permissions", role.Permissions)
+
+	return diags
 }

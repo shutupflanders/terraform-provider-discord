@@ -244,7 +244,9 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	name := d.Get("name").(string)
 	// DiscordGo doesn't support creating a server with anything apart from a name.
-	server, err := client.GuildCreate(name, discordgo.WithContext(ctx))
+	server, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.GuildCreate(name, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to create server: %s", err.Error())
 	}
@@ -270,22 +272,27 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 	}
 
 	verificationLevel := discordgo.VerificationLevel(d.Get("verification_level").(int))
-	server, err = client.GuildEdit(server.ID, &discordgo.GuildParams{
-		Icon:                        icon,
-		Region:                      d.Get("region").(string),
-		VerificationLevel:           &verificationLevel,
-		DefaultMessageNotifications: d.Get("default_message_notifications").(int),
-		ExplicitContentFilter:       d.Get("explicit_content_filter").(int),
-		AfkChannelID:                afkChannel,
-		AfkTimeout:                  afkTimeOut,
-		Splash:                      splash,
-	}, discordgo.WithContext(ctx))
+	server, err = executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.GuildEdit(server.ID, &discordgo.GuildParams{
+			Icon:                        icon,
+			Region:                      d.Get("region").(string),
+			VerificationLevel:           &verificationLevel,
+			DefaultMessageNotifications: d.Get("default_message_notifications").(int),
+			ExplicitContentFilter:       d.Get("explicit_content_filter").(int),
+			AfkChannelID:                afkChannel,
+			AfkTimeout:                  afkTimeOut,
+			Splash:                      splash,
+		}, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to edit server: %s", err.Error())
 	}
 
 	for _, channel := range server.Channels {
-		if _, err := client.ChannelDelete(channel.ID); err != nil {
+		if err := executeWithRetryNoResult(ctx, func() error {
+			_, err := client.ChannelDelete(channel.ID)
+			return err
+		}); err != nil {
 			return diag.Errorf("Failed to delete channel for new server: %s", err.Error())
 		}
 	}
@@ -298,9 +305,11 @@ func resourceServerCreate(ctx context.Context, d *schema.ResourceData, m interfa
 		if ownerId != newOwnerId {
 			ownerId = newOwnerId
 		}
-		server, err = client.GuildEdit(server.ID, &discordgo.GuildParams{
-			OwnerID: ownerId,
-		}, discordgo.WithContext(ctx))
+		server, err = executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+			return client.GuildEdit(server.ID, &discordgo.GuildParams{
+				OwnerID: ownerId,
+			}, discordgo.WithContext(ctx))
+		})
 	}
 
 	d.SetId(server.ID)
@@ -350,7 +359,9 @@ func resourceServerRead(ctx context.Context, d *schema.ResourceData, m interface
 	var diags diag.Diagnostics
 	client := m.(*Context).Session
 
-	server, err := client.Guild(d.Id(), discordgo.WithContext(ctx))
+	server, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.Guild(d.Id(), discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Error fetching server: %s", err.Error())
 	}
@@ -393,7 +404,9 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	var diags diag.Diagnostics
 	client := m.(*Context).Session
 
-	server, err := client.Guild(d.Id(), discordgo.WithContext(ctx))
+	server, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.Guild(d.Id(), discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Error fetching server: %s", err.Error())
 	}
@@ -467,7 +480,9 @@ func resourceServerUpdate(ctx context.Context, d *schema.ResourceData, m interfa
 	}
 
 	if edit {
-		if _, err = client.GuildEdit(server.ID, guildParams, discordgo.WithContext(ctx)); err != nil {
+		if _, err = executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+			return client.GuildEdit(server.ID, guildParams, discordgo.WithContext(ctx))
+		}); err != nil {
 			return diag.Errorf("Failed to edit server: %s", err.Error())
 		}
 	}
@@ -479,7 +494,9 @@ func resourceServerDelete(ctx context.Context, d *schema.ResourceData, m interfa
 	var diags diag.Diagnostics
 	client := m.(*Context).Session
 
-	if err := client.GuildDelete(d.Id(), discordgo.WithContext(ctx)); err != nil {
+	if err := executeWithRetryNoResult(ctx, func() error {
+		return client.GuildDelete(d.Id(), discordgo.WithContext(ctx))
+	}); err != nil {
 		return diag.Errorf("Failed to delete server: %s", err)
 	}
 

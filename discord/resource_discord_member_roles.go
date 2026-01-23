@@ -79,7 +79,9 @@ func resourceMemberRolesCreate(ctx context.Context, d *schema.ResourceData, m in
 	serverId := d.Get("server_id").(string)
 	userId := d.Get("user_id").(string)
 
-	if _, err := client.GuildMember(serverId, userId, discordgo.WithContext(ctx)); err != nil {
+	if _, err := executeWithRetry(ctx, func() (*discordgo.Member, error) {
+		return client.GuildMember(serverId, userId, discordgo.WithContext(ctx))
+	}); err != nil {
 		return diag.Errorf("Could not get member %s in %s: %s", userId, serverId, err.Error())
 	}
 
@@ -107,7 +109,9 @@ func resourceMemberRolesRead(ctx context.Context, d *schema.ResourceData, m inte
 		userId = uId
 	}
 
-	member, err := client.GuildMember(serverId, userId, discordgo.WithContext(ctx))
+	member, err := executeWithRetry(ctx, func() (*discordgo.Member, error) {
+		return client.GuildMember(serverId, userId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Could not get member %s in %s: %s", userId, serverId, err.Error())
 	}
@@ -135,7 +139,9 @@ func resourceMemberRolesUpdate(ctx context.Context, d *schema.ResourceData, m in
 	serverId := d.Get("server_id").(string)
 	userId := d.Get("user_id").(string)
 
-	member, err := client.GuildMember(serverId, userId, discordgo.WithContext(ctx))
+	member, err := executeWithRetry(ctx, func() (*discordgo.Member, error) {
+		return client.GuildMember(serverId, userId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Could not get member %s in %s: %s", userId, serverId, err.Error())
 	}
@@ -171,9 +177,12 @@ func resourceMemberRolesUpdate(ctx context.Context, d *schema.ResourceData, m in
 		}
 	}
 
-	if _, err := client.GuildMemberEdit(serverId, userId, &discordgo.GuildMemberParams{
-		Roles: &roles,
-	}, discordgo.WithContext(ctx)); err != nil {
+	if err := executeWithRetryNoResult(ctx, func() error {
+		_, err := client.GuildMemberEdit(serverId, userId, &discordgo.GuildMemberParams{
+			Roles: &roles,
+		}, discordgo.WithContext(ctx))
+		return err
+	}); err != nil {
 		return diag.Errorf("Failed to edit member %s: %s", userId, err.Error())
 	}
 
@@ -197,7 +206,9 @@ func resourceMemberRolesDelete(ctx context.Context, d *schema.ResourceData, m in
 	serverId := d.Get("server_id").(string)
 	userId := d.Get("user_id").(string)
 
-	member, err := client.GuildMember(serverId, userId, discordgo.WithContext(ctx))
+	member, err := executeWithRetry(ctx, func() (*discordgo.Member, error) {
+		return client.GuildMember(serverId, userId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Could not get member %s in %s: %s", userId, serverId, err.Error())
 	}
@@ -214,9 +225,12 @@ func resourceMemberRolesDelete(ctx context.Context, d *schema.ResourceData, m in
 		}
 	}
 
-	if _, err := client.GuildMemberEdit(serverId, userId, &discordgo.GuildMemberParams{
-		Roles: &roles,
-	}, discordgo.WithContext(ctx)); err != nil {
+	if err := executeWithRetryNoResult(ctx, func() error {
+		_, err := client.GuildMemberEdit(serverId, userId, &discordgo.GuildMemberParams{
+			Roles: &roles,
+		}, discordgo.WithContext(ctx))
+		return err
+	}); err != nil {
 		return diag.Errorf("Failed to delete member roles %s: %s", userId, err.Error())
 	}
 

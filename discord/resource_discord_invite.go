@@ -69,26 +69,31 @@ func resourceInviteCreate(ctx context.Context, d *schema.ResourceData, m interfa
 
 	channelId := d.Get("channel_id").(string)
 
-	if invite, err := client.ChannelInviteCreate(channelId, discordgo.Invite{
-		MaxAge:    d.Get("max_age").(int),
-		MaxUses:   d.Get("max_uses").(int),
-		Temporary: d.Get("temporary").(bool),
-		Unique:    d.Get("unique").(bool),
-	}, discordgo.WithContext(ctx)); err != nil {
+	invite, err := executeWithRetry(ctx, func() (*discordgo.Invite, error) {
+		return client.ChannelInviteCreate(channelId, discordgo.Invite{
+			MaxAge:    d.Get("max_age").(int),
+			MaxUses:   d.Get("max_uses").(int),
+			Temporary: d.Get("temporary").(bool),
+			Unique:    d.Get("unique").(bool),
+		}, discordgo.WithContext(ctx))
+	})
+	if err != nil {
 		return diag.Errorf("Failed to create a invite: %s", err.Error())
-	} else {
-		d.SetId(invite.Code)
-		d.Set("code", invite.Code)
-
-		return diags
 	}
+	d.SetId(invite.Code)
+	d.Set("code", invite.Code)
+
+	return diags
 }
 
 func resourceInviteRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
 	client := m.(*Context).Session
 
-	if invite, err := client.Invite(d.Id(), discordgo.WithContext(ctx)); err != nil {
+	invite, err := executeWithRetry(ctx, func() (*discordgo.Invite, error) {
+		return client.Invite(d.Id(), discordgo.WithContext(ctx))
+	})
+	if err != nil {
 		d.SetId("")
 	} else {
 		d.Set("code", invite.Code)
@@ -101,9 +106,12 @@ func resourceInviteDelete(ctx context.Context, d *schema.ResourceData, m interfa
 	var diags diag.Diagnostics
 	client := m.(*Context).Session
 
-	if _, err := client.InviteDelete(d.Id(), discordgo.WithContext(ctx)); err != nil {
+	if err := executeWithRetryNoResult(ctx, func() error {
+		_, err := client.InviteDelete(d.Id(), discordgo.WithContext(ctx))
+		return err
+	}); err != nil {
 		return diag.FromErr(err)
-	} else {
-		return diags
 	}
+
+	return diags
 }

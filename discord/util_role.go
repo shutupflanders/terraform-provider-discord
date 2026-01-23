@@ -60,7 +60,9 @@ func findRoleById(array []*discordgo.Role, id string) *discordgo.Role {
 func reorderRoles(ctx context.Context, m interface{}, serverId string, role *discordgo.Role, position int) (bool, diag.Diagnostics) {
 	client := m.(*Context).Session
 
-	roles, err := client.GuildRoles(serverId, discordgo.WithContext(ctx))
+	roles, err := executeWithRetry(ctx, func() ([]*discordgo.Role, error) {
+		return client.GuildRoles(serverId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return false, diag.Errorf("Failed to fetch roles: %s", err.Error())
 	}
@@ -71,7 +73,9 @@ func reorderRoles(ctx context.Context, m interface{}, serverId string, role *dis
 
 	moveRole(roles, index, position)
 
-	if roles, err = client.GuildRoleReorder(serverId, roles, discordgo.WithContext(ctx)); err != nil {
+	if roles, err = executeWithRetry(ctx, func() ([]*discordgo.Role, error) {
+		return client.GuildRoleReorder(serverId, roles, discordgo.WithContext(ctx))
+	}); err != nil {
 		return false, diag.Errorf("Failed to re-order roles: %s", err.Error())
 	}
 
@@ -79,9 +83,11 @@ func reorderRoles(ctx context.Context, m interface{}, serverId string, role *dis
 }
 
 func getRole(ctx context.Context, client *discordgo.Session, serverId string, roleId string) (*discordgo.Role, error) {
-	if roles, err := client.GuildRoles(serverId, discordgo.WithContext(ctx)); err != nil {
+	roles, err := executeWithRetry(ctx, func() ([]*discordgo.Role, error) {
+		return client.GuildRoles(serverId, discordgo.WithContext(ctx))
+	})
+	if err != nil {
 		return nil, err
-	} else {
-		return findRoleById(roles, roleId), nil
 	}
+	return findRoleById(roles, roleId), nil
 }

@@ -88,12 +88,16 @@ func dataSourceMemberRead(ctx context.Context, d *schema.ResourceData, m interfa
 
 	if v, ok := d.GetOk("user_id"); ok {
 
-		member, memberErr = client.GuildMember(serverId, v.(string), discordgo.WithContext(ctx))
+		member, memberErr = executeWithRetry(ctx, func() (*discordgo.Member, error) {
+			return client.GuildMember(serverId, v.(string), discordgo.WithContext(ctx))
+		})
 	}
 
 	if v, ok := d.GetOk("username"); ok {
 		username := v.(string)
-		members, err := client.GuildMembersSearch(serverId, username, 1, discordgo.WithContext(ctx))
+		members, err := executeWithRetry(ctx, func() ([]*discordgo.Member, error) {
+			return client.GuildMembersSearch(serverId, username, 1, discordgo.WithContext(ctx))
+		})
 		if err != nil {
 			return diag.Errorf("Failed to fetch members for %s: %s", serverId, err.Error())
 		}

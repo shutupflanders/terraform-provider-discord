@@ -45,7 +45,9 @@ func resourceSystemChannelCreate(ctx context.Context, d *schema.ResourceData, m 
 
 	serverId := d.Get("server_id").(string)
 
-	server, err := client.Guild(serverId, discordgo.WithContext(ctx))
+	server, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.Guild(serverId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Failed to find server: %s", err.Error())
 	}
@@ -57,9 +59,11 @@ func resourceSystemChannelCreate(ctx context.Context, d *schema.ResourceData, m 
 	} else {
 		return diag.Errorf("Failed to parse system channel id")
 	}
-	if _, err := client.GuildEdit(serverId, &discordgo.GuildParams{
-		SystemChannelID: systemChannelId,
-	}, discordgo.WithContext(ctx)); err != nil {
+	if _, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.GuildEdit(serverId, &discordgo.GuildParams{
+			SystemChannelID: systemChannelId,
+		}, discordgo.WithContext(ctx))
+	}); err != nil {
 		return diag.Errorf("Failed to edit server: %s", err.Error())
 	}
 
@@ -74,7 +78,9 @@ func resourceSystemChannelRead(ctx context.Context, d *schema.ResourceData, m in
 
 	serverId := d.Id()
 
-	server, err := client.Guild(serverId, discordgo.WithContext(ctx))
+	server, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.Guild(serverId, discordgo.WithContext(ctx))
+	})
 	if err != nil {
 		return diag.Errorf("Error fetching server: %s", err.Error())
 	}
@@ -89,7 +95,9 @@ func resourceSystemChannelUpdate(ctx context.Context, d *schema.ResourceData, m 
 	client := m.(*Context).Session
 
 	serverId := d.Get("server_id").(string)
-	_, err := client.Guild(serverId, discordgo.WithContext(ctx))
+	_, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.Guild(serverId, discordgo.WithContext(ctx))
+	})
 
 	if err != nil {
 		return diag.Errorf("Error fetching server: %s", err.Error())
@@ -97,9 +105,11 @@ func resourceSystemChannelUpdate(ctx context.Context, d *schema.ResourceData, m 
 
 	if d.HasChange("system_channel_id") {
 		id := d.Get("system_channel_id").(string)
-		if _, err := client.GuildEdit(serverId, &discordgo.GuildParams{
-			SystemChannelID: id,
-		}, discordgo.WithContext(ctx)); err != nil {
+		if _, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+			return client.GuildEdit(serverId, &discordgo.GuildParams{
+				SystemChannelID: id,
+			}, discordgo.WithContext(ctx))
+		}); err != nil {
 			return diag.Errorf("Failed to edit server: %s", err.Error())
 		}
 	}
@@ -113,9 +123,11 @@ func resourceSystemChannelDelete(ctx context.Context, d *schema.ResourceData, m 
 
 	serverID := d.Get("server_id").(string)
 
-	if _, err := client.GuildEdit(serverID, &discordgo.GuildParams{
-		SystemChannelID: "",
-	}, discordgo.WithContext(ctx)); err != nil {
+	if _, err := executeWithRetry(ctx, func() (*discordgo.Guild, error) {
+		return client.GuildEdit(serverID, &discordgo.GuildParams{
+			SystemChannelID: "",
+		}, discordgo.WithContext(ctx))
+	}); err != nil {
 		return diag.Errorf("Failed to edit server: %s: %s", serverID, err.Error())
 	}
 
